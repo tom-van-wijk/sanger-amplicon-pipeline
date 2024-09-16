@@ -1,8 +1,7 @@
 #!/usr/bin/env -S conda run -n sanger-amplicon-environment python
 
 # Name:		sanger-amplicon-pipeline
-# Author:	Tom van Wijk - NIOO KNAW
-# Contact:	t.vanwijk@nioo.knaw.nl / bioinformatics-support@nioo.knaw.nl
+# Author:	Tom van Wijk
 
 # Consult the README.md in this git repository for detailed instructions
 # on how to install and use this tool

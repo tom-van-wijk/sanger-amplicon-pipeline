@@ -1,37 +1,38 @@
 ### SANGER AMPLICON PIPELINE
 
-Author:         Tom van Wijk (NIOO-KNAW)<br/>
-Contact:        t.vanwijk@nioo.knaw.nl / bioinformatics-support@nioo.knaw.nl
+Author:         Tom van Wijk<br/>
+Contact:        tom_van_wijk@hotmail.com
 
 ### DESCRIPTION
 
 This pipeline processes, aligns and classifies paired- or single-end Sanger reads
 to a Silva or UNITE reference database and creates a taxonomy file. Reference database
 options for 16S, 18S, 23S, 28S and ITS amplicons are included.
-The pipeline is developed to run on the internal NIOO computing servers.
 
 ### INSTALLATION
 
-It is recommended to install the pipeline in your home directory: `/home/nioo/{username}`<br/>
+It is recommended to install the pipeline in your home directory: `/home/{username}`<br/>
 This is done by following these steps:
 
--	Clone the sanger-amplicon-pipeline repository to your home directory by logging on to the server,<br/>
-	navigating to your home directory if not already there and executing the command:<br/>
-	`git clone https://gitlab.bioinf.nioo.knaw.nl/pipelines/sanger-amplicon-pipeline.git`
+-	Clone the sanger-amplicon-pipeline repository to your home directory.<br/>
+	Navigating to your home directory if not already there and clone the pipeline:<br/>
+	`cd ~`
+	`git clone https://github.com/tom-van-wijk/sanger-amplicon-pipeline.git`
 
 -	To be able to run the python scripts for any location it is recommended to add the location<br/>
 	of the repository to your PATH variable:<br/>
-	`PATH=$PATH:/home/nioo/{username}/sanger-amplicon-pipeline/` (replace {username} with your actual username)<br/>
+	`PATH=$PATH:/home/{username}/sanger-amplicon-pipeline/` (replace {username} with your actual username)<br/>
 	Note: The PATH variable resets after every new login.<br/>
 	Therefore it is recommended to add the command to your `~/.bashrc file`.<br/>
-	This way, the PATH varibale is automatically configurated when you log-in on the server.
+	This way, the PATH varibale is automatically configurated when you log-in your computer.
 
-To run the pipeline on the NIOO servers it is required to create a conda environment<br/>
-that contains the required dependencies. You can do this by running the following commands:
+To run the pipeline it is required to have the conda environment manager installed,<br/>
+and to create a conda environment that contains the required dependencies.<br/>
+You can do this by running the following commands:
 
-`mamba create --name sanger-amplicon-environment`<br/>
+`conda create --name sanger-amplicon-environment`<br/>
 `conda activate sanger-amplicon-environment`<br/>
-`mamba install biopython fastqc python=3.9.4 multiqc pear rdptools`<br/>
+`conda install biopython fastqc python=3.9.4 multiqc pear rdptools`<br/>
 `conda deactivate`<br/>
 
 Note: It is recommended to only run one command at the time. Conda might require
@@ -40,11 +41,9 @@ input during multiple of these steps. Simply follow the instructions on the scre
 ### UPDATE INSTALLATION
 
 When you already have the sanger-amplicon-pipeline installed and want to check if there are updates<br/>
-and/or install updates, login on one of the nioo servers, navigate to the repository:<br/>
+navigate to the repository and pull from git:<br/>
 `cd sanger-amplicon-pipeline`
-
-and run the following command to check for updates:<br/>
-`git pull`
+`git pull`<br/>
 
 ### USAGE
 
@@ -107,7 +106,7 @@ issues in that regard.
 ### OUTPUT
 
 When you run the pipeline for the first time, it will create a directory in your home directory called<br/>
-`/home/nioo/{username}/sanger-amplicon-pipeline-output/`.<br/>
+`/home/{username}/sanger-amplicon-pipeline-output/`.<br/>
 
 In this directory, the output of each run you perform with the pipeline will
 be stored in their own subdirectory. The name of that subdirectory will be a
