@@ -1,0 +1,262 @@
+#!/usr/bin/env -S conda run -n sanger-amplicon-environment python
+
+# Name:		sanger-amplicon-pipeline
+# Author:	Tom van Wijk - NIOO KNAW
+# Contact:	t.vanwijk@nioo.knaw.nl / bioinformatics-support@nioo.knaw.nl
+
+# Consult the README.md in this git repository for detailed instructions
+# on how to install and use this tool
+
+
+# import python libraries
+from argparse import ArgumentParser
+from Bio import SeqIO
+import os
+import sys
+import logging
+import random
+
+
+# Function to parse the command-line arguments
+# Returns a namespace with argument keys and values
+def parse_arguments(args):
+	parser = ArgumentParser(prog="sanger-amplicon-pipeline")
+	parser.add_argument("-f", "--forward_dir", dest = "fordir",
+		action = "store", default = None, type = str,
+		help = "Location of directory with .ab1 files containing forward reads. (required)",
+		required = True)
+	parser.add_argument("-r", "--reverse_dir", dest = "revdir",
+		action = "store", default = 'na', type = str,
+		help = """Location of directory with .ab1 files containing reverse reads when using paired-end
+			read data. When left at default (parameter not defined), pipeline starts in single-end mode.""")
+	parser.add_argument("-n", "--project_name", dest = "projname",
+		action = "store", default = None, type = str,
+		help = "Name of the project that will be included in output directory name. (recommended)")
+	parser.add_argument("-d", "--reference_db", dest = "refdb",
+		action = "store", default = 'silva-ssu', type = str,
+		help = """Reference database to be used for taxonomic classification. Default = 'silva-ssu'
+			options: 'silva-ssu' (16S/18S), 'silva-lsu' (23S/28S), 'unite' (Fungal ITS).""")
+	parser.add_argument("-q", "--quality_trim", dest = "qtrim",
+		action = "store", default = "yes", type = str,
+		help = "Quality trimming of reads, set to 'no' to deactivate. Default = 'yes'.")
+	parser.add_argument("-t", "--delete_temp", dest = "deltemp",
+		action = "store", default = "yes", type = str,
+		help = "Delete temporary output files, set to 'no' to deactivate. Default = 'yes'.")
+	parser.add_argument("-x", "--nametrim", dest = "nametrim",
+		action = "store", default = "yes", type = str,
+		help = "Trim sequence names in MEGA output file. set to 'no' to deactivate. Default is 'yes'.")
+
+	return parser.parse_args()
+
+
+# Function creates logger with handlers for both logfile and console output
+# Returns logger
+def create_logger(outdir, run_id):
+	# create logger
+	log = logging.getLogger()
+	log.setLevel(logging.INFO)
+	# create file handler
+	fh = logging.FileHandler(outdir+"/"+str(run_id)+'_sanger-amplicon-pipeline.log')
+	fh.setLevel(logging.DEBUG)
+	fh.setFormatter(logging.Formatter('%(message)s'))
+	log.addHandler(fh)
+	# create console handler
+	ch = logging.StreamHandler()
+	ch.setLevel(logging.INFO)
+	ch.setFormatter(logging.Formatter('%(message)s'))
+	log.addHandler(ch)
+	return log
+
+
+# Function creates a list of files or directories in <inputdir>
+# on the specified directory depth
+def list_directory(input_dir, obj_type, depth):
+	dir_depth = 1
+	for root, dirs, files in os.walk(input_dir):
+		if dir_depth == depth:
+			if obj_type ==  'files':
+				return files
+			elif obj_type == 'dirs':
+				return dirs
+		dir_depth += 1
+
+
+# Function closes logger handlers
+def close_logger(log):
+        for handler in log.handlers:
+                handler.close()
+                log.removeFilter(handler)
+
+
+# MAIN function
+def main():
+	# parse command line arguments
+	args = parse_arguments(sys.argv)
+	# generate run_id
+	run_id = random.randint(1000000, 9999999)
+
+	# creating output directory
+	if args.projname == None:
+		outdir = os.path.expanduser('~')+"/sanger-amplicon-pipeline-output/"+str(run_id)+"/"
+	else:
+		outdir = os.path.expanduser('~')+"/sanger-amplicon-pipeline-output/"+args.projname+"_"+str(run_id)+"/"
+	os.system("mkdir -p "+outdir)
+
+	# create logger
+	if args.projname == None:
+		log = create_logger(outdir, run_id)
+	else:
+		combined = str(run_id)+"_"+args.projname
+		log = create_logger(outdir, combined)
+	log.info("Running python in env: "+sys.executable)
+	log.info("Logger created and starting analysis with run ID: "+str(run_id))
+	log.info("Output directory: "+outdir)
+
+	# determine forward or reverse mode
+	if args.revdir.lower() in ['default', 'no', 'n', 'off', 'na']:
+		log.info("\nPipeline running in single-end read mode...")
+		paired_end = False
+	else:
+		log.info("\nPipeline running in paired-end read mode...")
+		paired_end = True
+
+	# iterate over forward-read .ab1 files to convert to .fastq
+	log.info("\nStarting conversion of .ab1 to .fastq files...")
+	if args.qtrim.lower() in ["yes", "y", "true"]:
+		log.info("Quality trimming of reads is set to 'yes'")
+	else:
+		log.info("Quality trimming of reads is set to 'no'")
+	out_conv_for = outdir+"temp/01_fastq_convert/for/"
+	os.system("mkdir -p "+out_conv_for)
+	for_files = list_directory(os.path.abspath(args.fordir), "files", 1)
+	for file in for_files:
+		if file.endswith(".ab1") == True:
+			log.info("converting "+file+"...")
+			if args.qtrim.lower() in ["yes", "y", "true"]:
+				#Simple Quality Trimming with Mott's algorithm
+				SeqIO.convert(os.path.abspath(args.fordir)+"/"+file, "abi-trim",
+					out_conv_for+file.replace(".ab1", ".fastq"), "fastq")
+			else:
+				#No Quality trimming
+				SeqIO.convert(os.path.abspath(args.fordir)+"/"+file, "abi",
+					out_conv_for+file.replace(".ab1", ".fastq"), "fastq")
+
+	# iterate over reverse-read .ab1 files to convert to .fastq
+	if paired_end == True:
+		out_conv_rev = outdir+"temp/01_fastq_convert/rev/"
+		os.system("mkdir -p "+out_conv_rev)
+		for_files = list_directory(os.path.abspath(args.revdir), "files", 1)
+		for file in for_files:
+			if file.endswith(".ab1") == True:
+				log.info("converting "+file+"...")
+				if args.qtrim.lower() in ["yes", "y", "true"]:
+					#Simple Quality Trimming with Mott's algorithm
+					SeqIO.convert(os.path.abspath(args.revdir)+"/"+file, "abi-trim",
+						out_conv_rev+file.replace(".ab1", ".fastq"), "fastq")
+				else:
+					#No Quality trimming
+					SeqIO.convert(os.path.abspath(args.revdir)+"/"+file, "abi",
+						out_conv_rev+file.replace(".ab1", ".fastq"), "fastq")
+
+	# generate QC rapports for converted data
+	log.info("\nGenerating fastQC rapports for converted .fastq files...")
+	out_QC1 = outdir+"quality_control_post-trim"
+	os.system("mkdir -p "+out_QC1+"/fastQC")
+	for file in list_directory(os.path.abspath(out_conv_for), "files", 1):
+		os.system("fastqc "+os.path.abspath(out_conv_for)+"/"+file+" -t 16 -o "+out_QC1+"/fastQC/")
+	if paired_end == True:
+		for file in list_directory(os.path.abspath(out_conv_rev), "files", 1):
+			os.system("fastqc "+os.path.abspath(out_conv_rev)+"/"+file+" -t 16 -o "+out_QC1+"/fastQC/")
+	log.info("\nGenerating multiQC rapport for converted .fastq files...")
+	os.system("multiqc "+out_QC1+"/fastQC -o "+out_QC1)
+	if paired_end == True:
+		# create required output subdirectories for paired-end only
+		out_joined = outdir+"temp/02_fastq_assembled/"
+		os.system("mkdir -p "+out_joined)
+		out_concat = outdir+"temp/03_fastq_concatenated/"
+		os.system("mkdir -p "+out_concat)
+		# try to assemble forward and reverse reads (paired-end only)
+		log.info("\nAttempting to assemble overlapping forward and reverse reads...")
+		rev_files = list_directory(os.path.abspath(out_conv_rev), "files", 1)
+		for fastq in list_directory(os.path.abspath(out_conv_for), "files", 1):
+			pair = False
+			fastq_for = out_conv_for+fastq
+			seq_id = fastq.split(".")[-2].split("_")[-1]
+			for file in rev_files:
+				if (file.split(".")[-2]).endswith(seq_id):
+					fastq_rev = out_conv_rev+file
+					pair = True
+					break
+			if pair == False:
+				log.warning("No matching reverse fastq file found for forward file:\t"+fastq)
+			elif pair == True:
+				#os.system("fastq-join "+fastq_for+" "+fastq_rev+" -o "+out_joined+seq_id+"_") #Old code for fastq-join
+				os.system("pear -f "+fastq_for+" -r "+fastq_rev+" -o "+out_joined+seq_id) #New code for PEAR
+			# concatenate .fastq files, forward and reverse reads might not be able to be assembled
+			os.system("cat "+out_joined+seq_id+".unassembled.forward.fastq "
+				+out_joined+seq_id+".unassembled.reverse.fastq "
+				+out_joined+seq_id+".assembled.fastq > "+out_concat+seq_id+".fastq")
+
+	# create directories for converting .fastq to fasta
+	out_fasta = outdir+"/processed_fasta_files/"
+	os.system("mkdir -p "+out_fasta)
+	# determine input data directory based on paired-end or not
+	if paired_end == True:
+		fastq_dir = out_concat
+	else:
+		fastq_dir = out_conv_for
+	# convert .fastq to .fasta
+	log.info("\nConverting .fastq back to .fasta format...")
+	for fastq in list_directory(fastq_dir, "files", 1):
+		command=("cat "+fastq_dir+fastq
+			+""" | awk '{if(NR%4==1) {printf(">%s\n",substr($0,2));} else if(NR%4==2) print;}' | awk 'BEGIN {RS = ">" ; FS = "\n" ; ORS = ""} $2 {print ">"$0}' > """
+			+out_fasta+fastq.replace(".fastq", ".fasta")).encode("unicode_escape")
+		log.info(command)
+		os.system(command)
+
+	# map data to silva with rdp-tools
+	log.info("\nMapping .fasta files to reference database using RDP-tools...")
+	# select reference database:
+	if args.refdb.lower() in ['silva-lsu', 'silvalsu', 'silva_lsu',
+			'silva-isu', 'silvaisu', 'silva_isu', '23s', '28s']:
+		ref_db = "fulgallsu"
+	elif args.refdb.lower() in ['unite', 'its']:
+		ref_db = "fungalits_unite"
+	else:
+		ref_db = "16srrna"
+	if args.projname == None:
+		outfile_prefix = str(run_id)+"_"+ref_db
+	else:
+		outfile_prefix = str(run_id)+"_"+args.projname+"_"+ref_db
+	log.info("Using reference database: "+ref_db)
+	command = ("classifier -f fixrank -g "+ref_db+" -o "
+		+outdir+"/"+outfile_prefix+"_RDP-out.txt -h "
+		+outdir+"/"+outfile_prefix+"_RDP-hier.txt "+out_fasta+"/*.fasta")
+	log.info(command)
+	os.system(command)
+	os.system("rm "+outdir+"/cnadjusted_"+outfile_prefix+"_RDP-hier.txt" )
+
+	# run make-mega-file
+	log.info("\nWriting MEGA file...")
+	os.system("make-mega-format -f "+outdir+"/processed_fasta_files/ -i "
+		+outdir+"/"+outfile_prefix+"_RDP-out.txt -o "
+		+outdir+"/"+outfile_prefix+"_RDP-out -x "+args.nametrim)
+	if args.nametrim.lower() in ['yes', 'y']:
+		log.info("trimming sequence headers: \tyes")
+	else:
+		log.info("trimming sequence headers: \tno")
+
+	# remove temp directory if param is default
+	if args.deltemp.lower() in ['yes', 'y', 'true']:
+		log.info("\nRemoving /temp directory...")
+		os.system("rm -rf "+outdir+"/temp")
+	else:
+		log.info("\nPreserving /temp directory...")
+
+	# close logger handlers
+	log.info("\nClosing logger and exit script...")
+	close_logger(log)
+
+
+# calling MAIN function
+main()
